@@ -62,6 +62,20 @@ function mapStatus(status: TestResult['status']): 'passed' | 'failed' | 'skipped
   }
 }
 
+function normalizeAbsorbedError(raw: unknown): {
+  name: string;
+  message: string;
+  stack: string;
+} {
+  const obj = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const asString = (v: unknown, fallback: string): string => (typeof v === 'string' ? v : fallback);
+  return {
+    name: asString(obj.name, 'Error'),
+    message: asString(obj.message, ''),
+    stack: asString(obj.stack, ''),
+  };
+}
+
 function readAnnotations(test: TestCase): TestSpanInfo {
   const info: TestSpanInfo = { quarantined: false };
   for (const ann of test.annotations) {
@@ -69,11 +83,14 @@ function readAnnotations(test: TestCase): TestSpanInfo {
       info.quarantined = true;
     } else if (ann.type === QUARANTINED_ABSORBED_ANNOTATION) {
       info.quarantined = true;
+      let parsed: unknown;
       try {
-        info.absorbedError = JSON.parse(ann.description ?? '{}');
+        parsed = JSON.parse(ann.description ?? '{}');
       } catch {
-        info.absorbedError = { name: 'Error', message: '', stack: '' };
+        parsed = {};
       }
+      // OTel rejects undefined attribute values; normalize every field to a string.
+      info.absorbedError = normalizeAbsorbedError(parsed);
     }
   }
   return info;

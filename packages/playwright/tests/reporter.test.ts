@@ -179,6 +179,41 @@ describe('MergifyReporter', () => {
     expect(testSpan?.attributes['exception.message']).toBe('something broke');
   });
 
+  it('normalizes malformed absorbed-error payloads to string defaults', async () => {
+    const exporter = new InMemorySpanExporter();
+    const reporter = new MergifyReporter({ exporter });
+    writeStateFile(
+      { testRunId: 'deadbeefdeadbeef', quarantineList: ['q.spec.ts > flaky'] },
+      workDir
+    );
+
+    const test = makeTest({
+      file: '/repo/q.spec.ts',
+      rootDir: '/repo',
+      titlePath: ['', 'chromium', 'q.spec.ts', 'flaky'],
+      title: 'flaky',
+      status: 'passed',
+      annotations: [
+        { type: QUARANTINED_ANNOTATION, description: 'q.spec.ts > flaky' },
+        // Partial payload: name missing, stack wrong type — must not leak `undefined`
+        // into OTel attributes.
+        {
+          type: QUARANTINED_ABSORBED_ANNOTATION,
+          description: JSON.stringify({ message: 'boom', stack: 42 }),
+        },
+      ],
+    });
+    const suite: StubSuite = { allTests: () => [test] };
+
+    reporter.onBegin({ rootDir: '/repo' } as never, suite as never);
+    await reporter.onEnd({ status: 'passed' } as never);
+
+    const testSpan = exporter.getFinishedSpans().find((s) => s.attributes['test.scope'] === 'case');
+    expect(testSpan?.attributes['exception.type']).toBe('Error');
+    expect(testSpan?.attributes['exception.message']).toBe('boom');
+    expect(testSpan?.attributes['exception.stacktrace']).toBe('');
+  });
+
   it('uses the testRunId from the state file when present', async () => {
     const exporter = new InMemorySpanExporter();
     const reporter = new MergifyReporter({ exporter });
