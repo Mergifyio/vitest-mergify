@@ -1,0 +1,101 @@
+{
+  "name": "@mergifyio/playwright",
+  "version": "0.0.0",
+  "description": "Playwright plugin for Mergify CI Insights",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./reporter": {
+      "import": {
+        "types": "./dist/reporter.d.mts",
+        "default": "./dist/reporter.mjs"
+      },
+      "require": {
+        "types": "./dist/reporter.d.cts",
+        "default": "./dist/reporter.cjs"
+      }
+    },
+    "./setup": {
+      "import": {
+        "types": "./dist/setup.d.mts",
+        "default": "./dist/setup.mjs"
+      },
+      "require": {
+        "types": "./dist/setup.d.cts",
+        "default": "./dist/setup.cjs"
+      }
+    },
+    "./teardown": {
+      "import": {
+        "types": "./dist/teardown.d.mts",
+        "default": "./dist/teardown.mjs"
+      },
+      "require": {
+        "types": "./dist/teardown.d.cts",
+        "default": "./dist/teardown.cjs"
+      }
+    },
+    "./fixture": {
+      "import": {
+        "types": "./dist/fixture.d.mts",
+        "default": "./dist/fixture.mjs"
+      },
+      "require": {
+        "types": "./dist/fixture.d.cts",
+        "default": "./dist/fixture.cjs"
+      }
+    },
+    "./config": {
+      "import": {
+        "types": "./dist/config.d.mts",
+        "default": "./dist/config.mjs"
+      },
+      "require": {
+        "types": "./dist/config.d.cts",
+        "default": "./dist/config.cjs"
+      }
+    }
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": "^20.0.0 || >=22.0.0"
+  },
+  "dependencies": {
+    "@mergifyio/ci-core": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/core": "^2.6.1"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/sdk-trace-base": "^1.30.0",
+    "@playwright/test": "^1.40.0",
+    "vitest": "^4.1.4"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:e2e": "playwright test --config tests/e2e/playwright.config.ts"
+  },
+  "keywords": ["playwright", "test", "flaky-tests", "testing", "ci"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mergifyio/mergify-ci-plugins.git",
+    "directory": "packages/playwright"
+  },
+  "author": "Mergify <hello@mergify.com>"
+}
