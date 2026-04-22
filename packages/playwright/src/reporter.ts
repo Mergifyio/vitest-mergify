@@ -21,9 +21,11 @@ import type {
   TestCase,
   TestResult,
 } from '@playwright/test/reporter';
+import { buildQuarantineKey } from './quarantine-key.js';
 import * as playwrightResource from './resources/playwright.js';
+import { readStateFile } from './state-file.js';
 import type { MergifyReporterOptions } from './types.js';
-import { extractNamespace, mapStatus, projectNameFromTest } from './utils.js';
+import { extractNamespace, mapStatus, projectNameFromTest, toPosix } from './utils.js';
 
 const DEFAULT_API_URL = 'https://api.mergify.com';
 
@@ -33,6 +35,9 @@ export class MergifyReporter implements Reporter {
   private tracing: TracingContext | null = null;
   private sessionSpan: Span | undefined;
   private config: FullConfig | undefined;
+  private quarantineFetchedCount = 0;
+  private quarantineFetchedNames: string[] = [];
+  private quarantinedCaught: string[] = [];
 
   constructor(options?: MergifyReporterOptions) {
     this.options = options ?? {};
@@ -45,7 +50,8 @@ export class MergifyReporter implements Reporter {
   onBegin(config: FullConfig, _suite: Suite): void {
     this.config = config;
 
-    const testRunId = generateTestRunId();
+    const envId = process.env.MERGIFY_TEST_RUN_ID;
+    const testRunId = envId ?? generateTestRunId();
     const token = this.options.token ?? process.env.MERGIFY_TOKEN;
     const apiUrl = this.options.apiUrl ?? process.env.MERGIFY_API_URL ?? DEFAULT_API_URL;
     const repoName = getRepoName();
@@ -79,6 +85,15 @@ export class MergifyReporter implements Reporter {
       }
     }
 
+    const statePath = process.env.MERGIFY_STATE_FILE;
+    if (statePath) {
+      const state = readStateFile(statePath);
+      if (state) {
+        this.quarantineFetchedCount = state.quarantinedTests.length;
+        this.quarantineFetchedNames = state.quarantinedTests;
+      }
+    }
+
     this.session = {
       testRunId,
       scope: 'session',
@@ -103,7 +118,7 @@ export class MergifyReporter implements Reporter {
 
     const rootDir = this.config?.rootDir ?? '';
     const absoluteFilepath = test.location?.file ?? '';
-    const filepath = rootDir ? relative(rootDir, absoluteFilepath) : absoluteFilepath;
+    const filepath = toPosix(rootDir ? relative(rootDir, absoluteFilepath) : absoluteFilepath);
 
     const titlePath = test.titlePath();
     const namespace = extractNamespace(filepath, titlePath);
@@ -140,6 +155,14 @@ export class MergifyReporter implements Reporter {
       };
     }
 
+    const annotations =
+      (test as unknown as { annotations?: Array<{ type: string }> }).annotations ?? [];
+    const isQuarantined = annotations.some((a) => a.type === 'mergify:quarantined');
+    if (isQuarantined) {
+      testCaseResult.quarantined = true;
+      this.quarantinedCaught.push(buildQuarantineKey(filepath, titlePath, test.title));
+    }
+
     this.session.testCases.push(testCaseResult);
 
     if (this.tracing && this.sessionSpan) {
@@ -159,6 +182,24 @@ export class MergifyReporter implements Reporter {
 
     this.session.endTime = Date.now();
     this.session.status = reason;
+
+    if (this.quarantineFetchedCount > 0) {
+      const unused = this.quarantineFetchedCount - this.quarantinedCaught.length;
+      process.stderr.write('[@mergifyio/playwright] Quarantine report:\n');
+      process.stderr.write(`  fetched: ${this.quarantineFetchedCount}\n`);
+      process.stderr.write(`  caught:  ${this.quarantinedCaught.length}\n`);
+      for (const name of this.quarantinedCaught) {
+        process.stderr.write(`    - ${name}\n`);
+      }
+      process.stderr.write(`  unused:  ${unused}\n`);
+      if (unused > 0) {
+        const caughtSet = new Set(this.quarantinedCaught);
+        const unusedNames = this.quarantineFetchedNames.filter((n) => !caughtSet.has(n));
+        for (const name of unusedNames) {
+          process.stderr.write(`    - ${name}\n`);
+        }
+      }
+    }
 
     if (this.tracing && this.sessionSpan) {
       try {

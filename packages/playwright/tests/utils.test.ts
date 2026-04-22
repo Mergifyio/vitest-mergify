@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractNamespace, mapStatus, projectNameFromTest } from '../src/utils.js';
+import { extractNamespace, mapStatus, projectNameFromTest, toPosix } from '../src/utils.js';
 
 describe('extractNamespace', () => {
   it('prefixes the describe chain with the filepath', () => {
@@ -28,6 +28,33 @@ describe('extractNamespace', () => {
 
   it('drops empty segments so the result has no leading or trailing separator', () => {
     expect(extractNamespace('', ['', '', 'outer', 'my test'])).toBe('outer');
+  });
+});
+
+describe('toPosix', () => {
+  it('is a no-op on POSIX-style paths', () => {
+    expect(toPosix('tests/sample.spec.ts')).toBe('tests/sample.spec.ts');
+  });
+
+  it('replaces backslashes with forward slashes (Windows input)', () => {
+    expect(toPosix('tests\\sample.spec.ts')).toBe('tests/sample.spec.ts');
+  });
+
+  it('handles mixed separators', () => {
+    expect(toPosix('packages\\core/src\\types.ts')).toBe('packages/core/src/types.ts');
+  });
+
+  it('returns empty string unchanged', () => {
+    expect(toPosix('')).toBe('');
+  });
+});
+
+describe('extractNamespace — Windows-style input', () => {
+  it('produces POSIX-separated output when the caller pre-normalizes with toPosix', () => {
+    const winPath = toPosix('tests\\sample.spec.ts');
+    expect(extractNamespace(winPath, ['', 'chromium', 'sample.spec.ts', 'my test'])).toBe(
+      'tests/sample.spec.ts'
+    );
   });
 });
 
